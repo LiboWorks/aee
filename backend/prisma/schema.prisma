@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+}
+
+enum AssetStatus {
+  draft
+  approved
+  published
+}
+
+enum ExecutionPhase {
+  manual
+  automation
+  api
+}
+
+enum ExecutionStatus {
+  pending
+  confirmed
+  executing
+  completed
+  failed
+  rolledback
+}
+
+enum ExperimentStatus {
+  running
+  paused
+  completed
+}
+
+enum ExperimentDecision {
+  pass
+  fail
+  pending
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  isActive          Boolean   @default(false)
+  activationToken   String?   @unique
+  activationExpires DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  products          Product[]
+}
+
+model Product {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  url       String
+  title     String?
+  price     Float?
+  category  String?
+  imageUrls Json?
+  rawData   Json?
+  budget    Float
+  riskLevel RiskLevel
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  strategies Strategy[]
+
+  @@index([userId])
+}
+
+model Strategy {
+  id                   String        @id @default(uuid())
+  productId            String
+  product              Product       @relation(fields: [productId], references: [id])
+  viabilityScore       Float?
+  marginEstimate       Float?
+  competitionLevel     String?
+  differentiationPlan  Json?
+  pricingStrategy      Json?
+  executionPlan        Json?
+  rawLlmResponse       Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  listingAssets        ListingAsset[]
+
+  @@index([productId])
+}
+
+model ListingAsset {
+  id           String      @id @default(uuid())
+  strategyId   String
+  strategy     Strategy    @relation(fields: [strategyId], references: [id])
+  title        String
+  bulletPoints Json
+  description  String
+  imagePrompts Json
+  status       AssetStatus @default(draft)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  executions   Execution[]
+
+  @@index([strategyId])
+}
+
+model Execution {
+  id             String          @id @default(uuid())
+  listingAssetId String
+  listingAsset   ListingAsset    @relation(fields: [listingAssetId], references: [id])
+  phase          ExecutionPhase
+  status         ExecutionStatus @default(pending)
+  actionLog      Json?
+  retryCount     Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  experiments    Experiment[]
+
+  @@index([listingAssetId])
+}
+
+model Experiment {
+  id               String           @id @default(uuid())
+  executionId      String
+  execution        Execution        @relation(fields: [executionId], references: [id])
+  templateName     String?
+  durationDays     Int
+  budgetAllocation Float
+  kpiTargets       Json
+  status           ExperimentStatus @default(running)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  results          ExperimentResult[]
+
+  @@index([executionId])
+}
+
+model ExperimentResult {
+  id           String             @id @default(uuid())
+  experimentId String
+  experiment   Experiment         @relation(fields: [experimentId], references: [id])
+  day          Int
+  metrics      Json
+  decision     ExperimentDecision @default(pending)
+  suggestions  Json?
+  createdAt    DateTime           @default(now())
+
+  @@index([experimentId])
+}
+
+model ActionLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+model FeatureFlag {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  enabled     Boolean @default(false)
+  description String?
+}
