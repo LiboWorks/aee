@@ -9,6 +9,9 @@ set -euo pipefail
 echo "==> Updating system packages"
 apt-get update && apt-get upgrade -y
 
+echo "==> Installing Git"
+apt-get install -y git
+
 echo "==> Installing Docker"
 apt-get install -y ca-certificates curl gnupg
 install -m 0755 -d /etc/apt/keyrings
