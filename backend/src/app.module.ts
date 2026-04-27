@@ -13,8 +13,10 @@ import { ExecutionModule } from './execution/execution.module';
 import { ExperimentModule } from './experiment/experiment.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { FeatureFlagModule } from './feature-flag/feature-flag.module';
+import { HealthController } from './health.controller';
 
 @Module({
+  controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([
