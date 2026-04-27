@@ -27,7 +27,7 @@ An end-to-end SaaS platform that discovers product opportunities, generates stra
 | Frontend | Next.js 14, React, Tailwind CSS, Recharts |
 | Backend | NestJS, TypeScript |
 | Database | PostgreSQL, Prisma ORM |
-| LLM | OpenAI API (gpt-4o-mini), with mock fallback |
+| LLM | AWS Bedrock Runtime by default, with DeepSeek, OpenAI, and local GGUF fallbacks |
 | Automation | Playwright (gated by feature flag) |
 | Auth | JWT (bcrypt + passport) |
 
@@ -43,7 +43,7 @@ An end-to-end SaaS platform that discovers product opportunities, generates stra
 
 ```bash
 cp .env.example .env
-# Edit .env with your values (OPENAI_API_KEY is optional — mock mode works without it)
+# Edit .env with your values (Bedrock uses the standard AWS SDK credential chain)
 cp .env backend/.env
 ```
 
@@ -160,7 +160,7 @@ aee/
 │       ├── auth/              # JWT auth (register, login, guards)
 │       ├── product/           # Product ingestion + web scraper
 │       ├── strategy/          # Multi-step LLM strategy generation
-│       ├── llm/               # OpenAI wrapper + prompt templates
+│       ├── llm/               # Provider adapters + prompt templates
 │       ├── asset/             # Listing asset generation
 │       ├── execution/         # 3-phase execution (manual/auto/API)
 │       ├── automation/        # Playwright scripts
@@ -194,8 +194,12 @@ aee/
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string |
 | `JWT_SECRET` | Yes | — | Secret for JWT signing |
-| `OPENAI_API_KEY` | No | — | OpenAI API key (mock mode if absent) |
-| `LLM_MODEL` | No | gpt-4o-mini | OpenAI model to use |
+| `LLM_PROVIDER` | No | bedrock | Explicit provider override: `bedrock`, `deepseek`, `openai`, `local`, or `auto` |
+| `AWS_REGION` | No | — | AWS region for Bedrock Runtime |
+| `BEDROCK_MODEL_ID` | No | anthropic.claude-3-haiku-20240307-v1:0 | Bedrock model ID when Bedrock is active |
+| `OPENAI_API_KEY` | No | — | OpenAI API key fallback |
+| `DEEPSEEK_API_KEY` | No | — | DeepSeek API key fallback |
+| `LLM_MODEL` | No | deepseek-chat | Model name for DeepSeek/OpenAI when those providers are active |
 | `BACKEND_PORT` | No | 4000 | Backend server port |
 | `FRONTEND_URL` | No | http://localhost:3000 | CORS origin |
 | `THROTTLE_TTL` | No | 60 | Rate limit window (seconds) |

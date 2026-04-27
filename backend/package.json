@@ -12,6 +12,7 @@
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.730.0",
     "@langchain/community": "^0.0.28",
     "@langchain/core": "^0.1.52",
     "@langchain/openai": "^0.0.24",
