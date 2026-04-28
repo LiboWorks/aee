@@ -6,14 +6,50 @@
 # ──────────────────────────────────────────────────────────
 set -euo pipefail
 
+install_aws_cli() {
+  local arch
+  local aws_arch
+  local temp_dir
+
+  if command -v aws >/dev/null 2>&1; then
+    echo "==> AWS CLI already installed"
+    aws --version
+    return 0
+  fi
+
+  arch=$(dpkg --print-architecture)
+  case "$arch" in
+    amd64)
+      aws_arch="x86_64"
+      ;;
+    arm64)
+      aws_arch="aarch64"
+      ;;
+    *)
+      echo "ERROR: unsupported architecture for AWS CLI install: $arch"
+      exit 1
+      ;;
+  esac
+
+  temp_dir=$(mktemp -d)
+  trap 'rm -rf "$temp_dir"' RETURN
+
+  echo "==> Installing AWS CLI v2"
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "$temp_dir/awscliv2.zip"
+  unzip -q "$temp_dir/awscliv2.zip" -d "$temp_dir"
+  "$temp_dir/aws/install" --update
+  aws --version
+}
+
 echo "==> Updating system packages"
 apt-get update && apt-get upgrade -y
 
-echo "==> Installing Git"
-apt-get install -y git awscli jq
+echo "==> Installing base tools"
+apt-get install -y git jq unzip ca-certificates curl gnupg
+
+install_aws_cli
 
 echo "==> Installing Docker"
-apt-get install -y ca-certificates curl gnupg
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg

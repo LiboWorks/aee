@@ -186,9 +186,6 @@ if [ -f .env ]; then
   export AEE_ENV_SECRET_ID AEE_ENV_SSM_PATH AWS_REGION AWS_DEFAULT_REGION
 fi
 
-echo "==> Pulling latest code"
-git pull --ff-only
-
 echo "==> Rendering .env from .env.example and AWS-managed overrides"
 render_env_file
 validate_rendered_env
