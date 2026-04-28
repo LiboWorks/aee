@@ -45,4 +45,4 @@ COPY --from=builder /app/dist ./dist
 EXPOSE 4000
 
 # Run migrations then start the server
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
