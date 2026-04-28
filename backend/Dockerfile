@@ -32,7 +32,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
-RUN npm ci --omit=dev
+RUN npm ci
 
 # Generate Prisma client in production image
 RUN npx prisma generate

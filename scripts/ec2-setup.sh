@@ -10,7 +10,7 @@ echo "==> Updating system packages"
 apt-get update && apt-get upgrade -y
 
 echo "==> Installing Git"
-apt-get install -y git
+apt-get install -y git awscli jq
 
 echo "==> Installing Docker"
 apt-get install -y ca-certificates curl gnupg
@@ -32,5 +32,6 @@ systemctl start docker
 
 echo "==> Done! Log out and back in, then:"
 echo "    cd /home/ubuntu/aee"
-echo "    cp .env.example .env   # edit with real values"
-echo "    docker compose -f docker-compose.prod.yml up -d --build"
+echo "    export AEE_ENV_SECRET_ID=<your-secrets-manager-secret-id>   # optional"
+echo "    export AEE_ENV_SSM_PATH=</your/ssm/path/>                   # optional"
+echo "    ./scripts/deploy.sh"
