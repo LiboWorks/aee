@@ -2,34 +2,17 @@ const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, 
 const API_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
 class ApiClient {
-  private token: string | null = null;
-
-  setToken(token: string | null) {
-    this.token = token;
-    if (token) {
-      if (typeof window !== 'undefined') localStorage.setItem('aee_token', token);
-    } else {
-      if (typeof window !== 'undefined') localStorage.removeItem('aee_token');
-    }
-  }
-
-  getToken(): string | null {
-    if (this.token) return this.token;
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('aee_token');
-    }
-    return this.token;
-  }
-
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -40,26 +23,8 @@ class ApiClient {
   }
 
   // Auth
-  register(email: string, password: string) {
-    return this.request<{ message: string }>('/api/auth/register', {
-      method: 'POST', body: JSON.stringify({ email, password }),
-    });
-  }
-
-  login(email: string, password: string) {
-    return this.request<{ accessToken: string; userId: string; email: string }>('/api/auth/login', {
-      method: 'POST', body: JSON.stringify({ email, password }),
-    });
-  }
-
-  activateAccount(token: string) {
-    return this.request<{ accessToken: string; userId: string; email: string }>(`/api/auth/activate?token=${encodeURIComponent(token)}`);
-  }
-
-  resendActivation(email: string) {
-    return this.request<{ message: string }>('/api/auth/resend-activation', {
-      method: 'POST', body: JSON.stringify({ email }),
-    });
+  getCurrentUser() {
+    return this.request<import('./types').User>('/api/auth/me');
   }
 
   // Products

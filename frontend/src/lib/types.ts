@@ -34,6 +34,8 @@ export interface ProductRawData {
 export interface User {
   userId: string;
   email: string;
+  cognitoSub: string;
+  username: string | null;
 }
 
 export interface Product {
@@ -132,8 +134,3 @@ export interface HistoryResponse {
   pages: number;
 }
 
-export interface AuthResponse {
-  accessToken: string;
-  userId: string;
-  email: string;
-}

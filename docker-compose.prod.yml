@@ -4,36 +4,16 @@
 #   docker compose -f docker-compose.prod.yml up -d --build
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: aee-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-aee_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-aee_db}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aee_user} -d ${POSTGRES_DB:-aee_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: aee-backend
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+    ports:
+      - "4000:4000"
     env_file:
       - .env
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-aee_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aee_db}
-      BACKEND_PORT: "4000"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:4000/healthz || exit 1"]
       interval: 10s
@@ -46,27 +26,14 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # When behind nginx, the frontend calls /api/* on the same origin
+        # With ALB path-based routing (/api -> backend), keep same-origin API calls.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     container_name: aee-frontend
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     depends_on:
       backend:
         condition: service_healthy
     environment:
       HOSTNAME: "0.0.0.0"
-
-  nginx:
-    image: nginx:alpine
-    container_name: aee-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - frontend
-      - backend
-
-volumes:
-  pgdata:

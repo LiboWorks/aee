@@ -26,10 +26,10 @@ An end-to-end SaaS platform that discovers product opportunities, generates stra
 |-------|-----------|
 | Frontend | Next.js 14, React, Tailwind CSS, Recharts |
 | Backend | NestJS, TypeScript |
-| Database | PostgreSQL, Prisma ORM |
+| Database | PostgreSQL, Prisma ORM, Amazon RDS (production) |
 | LLM | AWS Bedrock Runtime by default, with DeepSeek, OpenAI, and local GGUF fallbacks |
 | Automation | Playwright (gated by feature flag) |
-| Auth | JWT (bcrypt + passport) |
+| Auth | Amazon Cognito User Pool + Hosted UI |
 
 ## Quick Start
 
@@ -43,7 +43,9 @@ An end-to-end SaaS platform that discovers product opportunities, generates stra
 
 ```bash
 cp .env.example .env
-# Edit .env with your values (Bedrock uses the standard AWS SDK credential chain)
+# Edit .env with your values (Bedrock uses the standard AWS SDK credential chain,
+# Cognito Hosted UI needs backend COGNITO_* + SESSION_SECRET,
+# and USE_RDS controls external RDS vs local postgres sidecar)
 cp .env backend/.env
 ```
 
@@ -90,6 +92,27 @@ cd frontend && npm run dev:clean
 
 Open **http://localhost:3000** — register an account and start.
 
+For local auth, configure a Cognito User Pool + Hosted UI app client and set:
+
+- `COGNITO_USER_POOL_ID`
+- `COGNITO_APP_CLIENT_ID`
+- `COGNITO_HOSTED_UI_DOMAIN`
+- `COGNITO_REDIRECT_URI`
+- `COGNITO_LOGOUT_URI`
+- `SESSION_SECRET`
+
+For production on EC2 with ALB (no nginx container):
+
+- Route `/*` to the frontend target (port `3000`)
+- Route `/api/*` to the backend target (port `4000`)
+- Keep `NEXT_PUBLIC_API_URL` empty so frontend calls same-origin `/api/*`
+- Restrict EC2 security groups so only the ALB can access ports `3000` and `4000`
+
+Database mode switch:
+
+- `USE_RDS=true`: use external PostgreSQL from `DATABASE_URL`
+- `USE_RDS=false`: deploys a local postgres sidecar (`docker-compose.localdb.yml`) and backend uses it automatically
+
 ### 5. Inspect Database
 
 ```bash
@@ -113,8 +136,10 @@ docker exec -it aee-postgres psql -U postgres -d aee
 
 | Method | Endpoint | Description |
 |--------|---------|-------------|
-| POST | `/api/auth/register` | Register |
-| POST | `/api/auth/login` | Login |
+| GET | `/api/auth/login` | Start Cognito Hosted UI login |
+| GET | `/api/auth/callback` | Handle Cognito OIDC callback and create session |
+| GET | `/api/auth/logout` | Clear app session and sign out from Hosted UI |
+| GET | `/api/auth/me` | Return current session user |
 | POST | `/api/products` | Create product from URL |
 | GET | `/api/products` | List user products |
 | GET | `/api/products/:id` | Get product detail |
@@ -157,7 +182,7 @@ aee/
 │   └── src/
 │       ├── main.ts            # NestJS bootstrap
 │       ├── app.module.ts      # Root module
-│       ├── auth/              # JWT auth (register, login, guards)
+│       ├── auth/              # Cognito Hosted UI OIDC + session user sync
 │       ├── product/           # Product ingestion + web scraper
 │       ├── strategy/          # Multi-step LLM strategy generation
 │       ├── llm/               # Provider adapters + prompt templates
@@ -192,8 +217,21 @@ aee/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `JWT_SECRET` | Yes | — | Secret for JWT signing |
+| `USE_RDS` | No | false | `true` uses external RDS, `false` uses local postgres sidecar |
+| `POSTGRES_USER` | No | aee_user | Local postgres username when `USE_RDS=false` |
+| `POSTGRES_PASSWORD` | Yes when `USE_RDS=false` | — | Local postgres password |
+| `POSTGRES_DB` | No | aee_db | Local postgres database name when `USE_RDS=false` |
+| `DATABASE_URL` | Yes when `USE_RDS=true` | — | PostgreSQL connection string for RDS |
+| `COGNITO_USER_POOL_ID` | Yes | — | Cognito User Pool ID (used to derive issuer when `COGNITO_ISSUER_URL` is not set) |
+| `COGNITO_APP_CLIENT_ID` | Yes | — | Cognito app client ID used by backend OIDC client |
+| `COGNITO_APP_CLIENT_SECRET` | No | — | Cognito app client secret (required for confidential clients) |
+| `COGNITO_ISSUER_URL` | No | derived | Optional explicit issuer URL |
+| `COGNITO_HOSTED_UI_DOMAIN` | Yes | — | Cognito Hosted UI domain, including `https://` |
+| `COGNITO_REDIRECT_URI` | Yes | — | Hosted UI callback URL, e.g. `https://app.example.com/api/auth/callback` |
+| `COGNITO_LOGOUT_URI` | Yes | — | Hosted UI logout redirect URL, e.g. `https://app.example.com/login` |
+| `COGNITO_SCOPE` | No | openid email profile | OIDC scopes requested during login |
+| `SESSION_SECRET` | Yes | — | Express session signing secret |
+| `SESSION_COOKIE_SECURE` | No | true in production | Set to `true` behind HTTPS, `false` for local HTTP |
 | `LLM_PROVIDER` | No | bedrock | Explicit provider override: `bedrock`, `deepseek`, `openai`, `local`, or `auto` |
 | `AWS_REGION` | No | — | AWS region for Bedrock Runtime |
 | `BEDROCK_MODEL_ID` | No | anthropic.claude-3-haiku-20240307-v1:0 | Bedrock model ID when Bedrock is active |

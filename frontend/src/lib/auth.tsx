@@ -3,6 +3,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { api } from './api';
 
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+const AUTH_BASE_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
+
 interface AuthState {
   isAuthenticated: boolean;
   userId: string | null;
@@ -11,9 +14,10 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  signIn: () => Promise<void>;
+  signUp: () => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -26,39 +30,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
   });
 
-  useEffect(() => {
-    const token = api.getToken();
-    if (token) {
-      const payload = parseJwt(token);
-      if (payload && payload.exp * 1000 > Date.now()) {
-        setState({ isAuthenticated: true, userId: payload.sub, email: payload.email, loading: false });
-      } else {
-        api.setToken(null);
-        setState((s) => ({ ...s, loading: false }));
-      }
-    } else {
-      setState((s) => ({ ...s, loading: false }));
-    }
-  }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api.login(email, password);
-    api.setToken(res.accessToken);
-    setState({ isAuthenticated: true, userId: res.userId, email: res.email, loading: false });
-  }, []);
-
-  const register = useCallback(async (email: string, password: string) => {
-    await api.register(email, password);
-    // Registration no longer auto-logs in — user must activate via email first
-  }, []);
-
-  const logout = useCallback(() => {
-    api.setToken(null);
+  const resetAuthState = useCallback(() => {
     setState({ isAuthenticated: false, userId: null, email: null, loading: false });
   }, []);
 
+  const syncSession = useCallback(async () => {
+    try {
+      const user = await api.getCurrentUser();
+      setState({
+        isAuthenticated: true,
+        userId: user.userId,
+        email: user.email,
+        loading: false,
+      });
+    } catch {
+      resetAuthState();
+    }
+  }, [resetAuthState]);
+
+  useEffect(() => {
+    void syncSession();
+  }, [syncSession]);
+
+  const signIn = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true }));
+    window.location.assign(`${AUTH_BASE_URL}/api/auth/login`);
+  }, []);
+
+  const signUp = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true }));
+    window.location.assign(`${AUTH_BASE_URL}/api/auth/login?mode=signup`);
+  }, []);
+
+  const logout = useCallback(() => {
+    resetAuthState();
+    window.location.assign(`${AUTH_BASE_URL}/api/auth/logout`);
+  }, [resetAuthState]);
+
+  const refreshUser = useCallback(async () => {
+    await syncSession();
+  }, [syncSession]);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUp, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -68,13 +82,4 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
-}
-
-function parseJwt(token: string): { sub: string; email: string; exp: number } | null {
-  try {
-    const base64 = token.split('.')[1];
-    return JSON.parse(atob(base64));
-  } catch {
-    return null;
-  }
 }

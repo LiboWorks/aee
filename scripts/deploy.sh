@@ -124,6 +124,13 @@ overlay_ssm_values() {
 
 render_env_file() {
   local rendered_env
+  local frontend_url
+  local legacy_domain
+  local legacy_redirect
+  local legacy_logout
+  local use_rds
+  local postgres_user
+  local postgres_db
 
   if [ ! -f .env.example ]; then
     echo "ERROR: .env.example is missing."
@@ -146,6 +153,60 @@ render_env_file() {
     overlay_ssm_values "$AEE_ENV_SSM_PATH" "$rendered_env"
   fi
 
+  frontend_url=$(read_env_value "$rendered_env" FRONTEND_URL)
+  legacy_domain=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_DOMAIN)
+  legacy_redirect=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_REDIRECT_URI)
+  legacy_logout=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_LOGOUT_URI)
+  use_rds=$(read_env_value "$rendered_env" USE_RDS)
+
+  if [ -z "$use_rds" ]; then
+    use_rds="true"
+    upsert_env_var "$rendered_env" USE_RDS "$use_rds"
+  fi
+
+  case "$use_rds" in
+    true|false)
+      ;;
+    *)
+      echo "ERROR: USE_RDS must be either true or false."
+      exit 1
+      ;;
+  esac
+
+  if [ "$use_rds" = "false" ]; then
+    postgres_user=$(read_env_value "$rendered_env" POSTGRES_USER)
+    postgres_db=$(read_env_value "$rendered_env" POSTGRES_DB)
+
+    if [ -z "$postgres_user" ]; then
+      upsert_env_var "$rendered_env" POSTGRES_USER "aee_user"
+    fi
+
+    if [ -z "$postgres_db" ]; then
+      upsert_env_var "$rendered_env" POSTGRES_DB "aee_db"
+    fi
+  fi
+
+  if [ -z "$(read_env_value "$rendered_env" COGNITO_HOSTED_UI_DOMAIN)" ] && [ -n "$legacy_domain" ]; then
+    upsert_env_var "$rendered_env" COGNITO_HOSTED_UI_DOMAIN "$legacy_domain"
+  fi
+
+  if [ -z "$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)" ] && [ -n "$legacy_redirect" ]; then
+    upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "$legacy_redirect"
+  fi
+
+  if [ -z "$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)" ] && [ -n "$legacy_logout" ]; then
+    upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "$legacy_logout"
+  fi
+
+  if [ -n "$frontend_url" ]; then
+    if [ -z "$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)" ]; then
+      upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "${frontend_url%/}/api/auth/callback"
+    fi
+    if [ -z "$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)" ]; then
+      upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "${frontend_url%/}/login"
+    fi
+  fi
+
   if [ "$(read_env_value "$rendered_env" NEXT_PUBLIC_API_URL)" = "http://localhost:4000" ]; then
     upsert_env_var "$rendered_env" NEXT_PUBLIC_API_URL ""
   fi
@@ -154,26 +215,92 @@ render_env_file() {
 }
 
 validate_rendered_env() {
+  local use_rds
+  local database_url
   local postgres_password
-  local jwt_secret
   local frontend_url
+  local cognito_user_pool_id
+  local cognito_app_client_id
+  local session_secret
+  local hosted_ui_domain
+  local hosted_ui_redirect_uri
+  local hosted_ui_logout_uri
+  local cognito_issuer_url
 
+  use_rds=$(read_env_value .env USE_RDS)
+  database_url=$(read_env_value .env DATABASE_URL)
   postgres_password=$(read_env_value .env POSTGRES_PASSWORD)
-  jwt_secret=$(read_env_value .env JWT_SECRET)
   frontend_url=$(read_env_value .env FRONTEND_URL)
+  cognito_user_pool_id=$(read_env_value .env COGNITO_USER_POOL_ID)
+  cognito_app_client_id=$(read_env_value .env COGNITO_APP_CLIENT_ID)
+  session_secret=$(read_env_value .env SESSION_SECRET)
+  hosted_ui_domain=$(read_env_value .env COGNITO_HOSTED_UI_DOMAIN)
+  hosted_ui_redirect_uri=$(read_env_value .env COGNITO_REDIRECT_URI)
+  hosted_ui_logout_uri=$(read_env_value .env COGNITO_LOGOUT_URI)
+  cognito_issuer_url=$(read_env_value .env COGNITO_ISSUER_URL)
 
-  if [ -z "$postgres_password" ] || [[ "$postgres_password" == change-me* ]]; then
-    echo "ERROR: POSTGRES_PASSWORD is not set to a real value."
+  if [ -z "$use_rds" ]; then
+    use_rds="true"
+  fi
+
+  case "$use_rds" in
+    true|false)
+      ;;
+    *)
+      echo "ERROR: USE_RDS must be either true or false."
+      exit 1
+      ;;
+  esac
+
+  if [ "$use_rds" = "true" ]; then
+    if [ -z "$database_url" ] || [[ "$database_url" == *change-me* ]] || [[ "$database_url" == *"@localhost"* ]] || [[ "$database_url" == *"@postgres:"* ]]; then
+      echo "ERROR: DATABASE_URL must point to your RDS PostgreSQL instance when USE_RDS=true."
+      exit 1
+    fi
+  else
+    if [ -z "$postgres_password" ] || [[ "$postgres_password" == change-me* ]]; then
+      echo "ERROR: POSTGRES_PASSWORD must be set when USE_RDS=false."
+      exit 1
+    fi
+  fi
+
+  if [ -z "$cognito_user_pool_id" ] || [[ "$cognito_user_pool_id" == *example* ]]; then
+    echo "ERROR: COGNITO_USER_POOL_ID must be set to your Cognito User Pool ID."
     exit 1
   fi
 
-  if [ -z "$jwt_secret" ] || [[ "$jwt_secret" == change-me* ]]; then
-    echo "ERROR: JWT_SECRET is not set to a real value."
+  if [ -z "$cognito_app_client_id" ] || [[ "$cognito_app_client_id" == your-* ]]; then
+    echo "ERROR: COGNITO_APP_CLIENT_ID must be set to your Cognito app client ID."
     exit 1
   fi
 
   if [ -z "$frontend_url" ] || [[ "$frontend_url" == http://localhost* ]]; then
     echo "ERROR: FRONTEND_URL must be set to the public app URL for EC2 deployment."
+    exit 1
+  fi
+
+  if [ -z "$session_secret" ] || [[ "$session_secret" == replace-* ]]; then
+    echo "ERROR: SESSION_SECRET must be set to a strong random secret."
+    exit 1
+  fi
+
+  if [ -z "$hosted_ui_domain" ] || [[ "$hosted_ui_domain" != https://* ]]; then
+    echo "ERROR: COGNITO_HOSTED_UI_DOMAIN must be set to your Cognito Hosted UI domain."
+    exit 1
+  fi
+
+  if [ -z "$hosted_ui_redirect_uri" ] || [[ "$hosted_ui_redirect_uri" != http*://* ]]; then
+    echo "ERROR: COGNITO_REDIRECT_URI must be set to your Hosted UI callback URL."
+    exit 1
+  fi
+
+  if [ -z "$hosted_ui_logout_uri" ] || [[ "$hosted_ui_logout_uri" != http*://* ]]; then
+    echo "ERROR: COGNITO_LOGOUT_URI must be set to your Hosted UI logout redirect URL."
+    exit 1
+  fi
+
+  if [ -n "$cognito_issuer_url" ] && [[ "$cognito_issuer_url" != https://* ]]; then
+    echo "ERROR: COGNITO_ISSUER_URL must start with https:// when provided."
     exit 1
   fi
 }
@@ -190,17 +317,30 @@ echo "==> Rendering .env from .env.example and AWS-managed overrides"
 render_env_file
 validate_rendered_env
 
+USE_RDS_VALUE=$(read_env_value .env USE_RDS)
+if [ -z "$USE_RDS_VALUE" ]; then
+  USE_RDS_VALUE="true"
+fi
+
+compose_files=(-f docker-compose.prod.yml)
+if [ "$USE_RDS_VALUE" = "false" ]; then
+  compose_files+=(-f docker-compose.localdb.yml)
+  echo "==> USE_RDS=false: using local postgres sidecar"
+else
+  echo "==> USE_RDS=true: using external RDS"
+fi
+
 echo "==> Building and starting containers"
-if ! docker compose -f docker-compose.prod.yml up -d --build --remove-orphans; then
+if ! docker compose "${compose_files[@]}" up -d --build --remove-orphans; then
   echo "==> Deployment failed. Recent backend logs:"
-  docker compose -f docker-compose.prod.yml logs --tail=200 backend || true
+  docker compose "${compose_files[@]}" logs --tail=200 backend || true
   exit 1
 fi
 
-backend_container_status=$(docker compose -f docker-compose.prod.yml ps --format json backend 2>/dev/null || true)
+backend_container_status=$(docker compose "${compose_files[@]}" ps --format json backend 2>/dev/null || true)
 if printf '%s' "$backend_container_status" | grep -qi 'unhealthy'; then
   echo "==> Backend is unhealthy. Recent backend logs:"
-  docker compose -f docker-compose.prod.yml logs --tail=200 backend || true
+  docker compose "${compose_files[@]}" logs --tail=200 backend || true
   exit 1
 fi
 
@@ -208,4 +348,4 @@ echo "==> Cleaning up old images"
 docker image prune -f
 
 echo "==> Deployment complete"
-docker compose -f docker-compose.prod.yml ps
+docker compose "${compose_files[@]}" ps
