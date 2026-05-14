@@ -3,10 +3,11 @@ const API_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'h
 
 class ApiClient {
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    };
+    const headers = this.toHeaderRecord(options.headers);
+
+    if (options.body !== undefined && !this.hasContentTypeHeader(headers)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
@@ -14,17 +15,50 @@ class ApiClient {
       credentials: 'include',
     });
 
+    if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+      throw new Error('Missing authentication session');
+    }
+
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || `API error: ${res.status}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `API error: ${res.status}`);
+      }
+
+      throw new Error(`API error: ${res.status}`);
+    }
+
+    if (res.status === 204) {
+      return undefined as T;
     }
 
     return res.json();
   }
 
+  private toHeaderRecord(headers?: HeadersInit): Record<string, string> {
+    if (!headers) {
+      return {};
+    }
+
+    if (headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+
+    if (Array.isArray(headers)) {
+      return Object.fromEntries(headers);
+    }
+
+    return { ...headers };
+  }
+
+  private hasContentTypeHeader(headers: Record<string, string>): boolean {
+    return Object.keys(headers).some((name) => name.toLowerCase() === 'content-type');
+  }
+
   // Auth
   getCurrentUser() {
-    return this.request<import('./types').User>('/api/auth/me');
+    return this.request<import('./types').User>('/api/auth/me', { redirect: 'manual' });
   }
 
   // Products
