@@ -122,12 +122,29 @@ overlay_ssm_values() {
   rm -f "$temp_file"
 }
 
+is_alb_callback_uri() {
+  local uri="$1"
+
+  case "$uri" in
+    */oauth2/idpresponse|*/oauth2/idpresponse\?*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 render_env_file() {
   local rendered_env
   local frontend_url
   local legacy_domain
   local legacy_redirect
   local legacy_logout
+  local current_redirect
+  local current_logout
+  local canonical_redirect
+  local canonical_logout
   local use_rds
   local postgres_user
   local postgres_db
@@ -204,6 +221,21 @@ render_env_file() {
     fi
     if [ -z "$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)" ]; then
       upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "${frontend_url%/}/login"
+    fi
+
+    canonical_redirect="${frontend_url%/}/api/auth/callback"
+    canonical_logout="${frontend_url%/}/login"
+    current_redirect=$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)
+    current_logout=$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)
+
+    if [ -n "$current_redirect" ] && is_alb_callback_uri "$current_redirect"; then
+      echo "==> Replacing legacy COGNITO_REDIRECT_URI with $canonical_redirect"
+      upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "$canonical_redirect"
+    fi
+
+    if [ -n "$current_logout" ] && is_alb_callback_uri "$current_logout"; then
+      echo "==> Replacing legacy COGNITO_LOGOUT_URI with $canonical_logout"
+      upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "$canonical_logout"
     fi
   fi
 
@@ -294,8 +326,18 @@ validate_rendered_env() {
     exit 1
   fi
 
+  if is_alb_callback_uri "$hosted_ui_redirect_uri"; then
+    echo "ERROR: COGNITO_REDIRECT_URI cannot be /oauth2/idpresponse for this app. Use ${frontend_url%/}/api/auth/callback."
+    exit 1
+  fi
+
   if [ -z "$hosted_ui_logout_uri" ] || [[ "$hosted_ui_logout_uri" != http*://* ]]; then
     echo "ERROR: COGNITO_LOGOUT_URI must be set to your Hosted UI logout redirect URL."
+    exit 1
+  fi
+
+  if is_alb_callback_uri "$hosted_ui_logout_uri"; then
+    echo "ERROR: COGNITO_LOGOUT_URI cannot be /oauth2/idpresponse. Use ${frontend_url%/}/login."
     exit 1
   fi
 

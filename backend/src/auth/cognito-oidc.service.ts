@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client, generators, Issuer } from 'openid-client';
 
@@ -14,6 +14,7 @@ export interface CognitoAuthConfig {
 @Injectable()
 export class CognitoOidcService {
   private clientPromise?: Promise<Client>;
+  private readonly logger = new Logger(CognitoOidcService.name);
 
   constructor(private readonly config: ConfigService) {}
 
@@ -26,9 +27,10 @@ export class CognitoOidcService {
 
   getConfig(): CognitoAuthConfig {
     const clientId = this.mustGet('COGNITO_APP_CLIENT_ID');
-    const redirectUri = this.mustGet('COGNITO_REDIRECT_URI');
     const hostedUiDomain = this.mustGet('COGNITO_HOSTED_UI_DOMAIN');
-    const logoutUri = this.mustGet('COGNITO_LOGOUT_URI');
+    const frontendBaseUrl = this.getFrontendBaseUrl();
+    const redirectUri = this.resolveRedirectUri(frontendBaseUrl);
+    const logoutUri = this.resolveLogoutUri(frontendBaseUrl);
 
     return {
       clientId,
@@ -91,6 +93,55 @@ export class CognitoOidcService {
     }
 
     return `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+  }
+
+  private resolveRedirectUri(frontendBaseUrl: string): string {
+    const configuredRedirectUri = this.config.get<string>('COGNITO_REDIRECT_URI')?.trim();
+    const fallbackRedirectUri = `${frontendBaseUrl}/api/auth/callback`;
+
+    if (!configuredRedirectUri) {
+      return fallbackRedirectUri;
+    }
+
+    if (this.isAlbCallbackUri(configuredRedirectUri)) {
+      this.logger.warn(
+        `COGNITO_REDIRECT_URI points to a legacy ALB callback (${configuredRedirectUri}). Falling back to ${fallbackRedirectUri}.`,
+      );
+      return fallbackRedirectUri;
+    }
+
+    return configuredRedirectUri;
+  }
+
+  private resolveLogoutUri(frontendBaseUrl: string): string {
+    const configuredLogoutUri = this.config.get<string>('COGNITO_LOGOUT_URI')?.trim();
+    const fallbackLogoutUri = `${frontendBaseUrl}/login`;
+
+    if (!configuredLogoutUri) {
+      return fallbackLogoutUri;
+    }
+
+    if (this.isAlbCallbackUri(configuredLogoutUri)) {
+      this.logger.warn(
+        `COGNITO_LOGOUT_URI points to a legacy ALB callback (${configuredLogoutUri}). Falling back to ${fallbackLogoutUri}.`,
+      );
+      return fallbackLogoutUri;
+    }
+
+    return configuredLogoutUri;
+  }
+
+  private getFrontendBaseUrl(): string {
+    const frontendUrl = (this.config.get<string>('FRONTEND_URL') || 'http://localhost:3000').trim();
+    return frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
+  }
+
+  private isAlbCallbackUri(uri: string): boolean {
+    try {
+      return new URL(uri).pathname === '/oauth2/idpresponse';
+    } catch {
+      return uri.includes('/oauth2/idpresponse');
+    }
   }
 
   private normalizeDomain(domain: string): string {
