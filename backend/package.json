@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/src/main",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:sync": "prisma db push",
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
