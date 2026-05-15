@@ -122,29 +122,8 @@ overlay_ssm_values() {
   rm -f "$temp_file"
 }
 
-is_alb_callback_uri() {
-  local uri="$1"
-
-  case "$uri" in
-    */oauth2/idpresponse|*/oauth2/idpresponse\?*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 render_env_file() {
   local rendered_env
-  local frontend_url
-  local legacy_domain
-  local legacy_redirect
-  local legacy_logout
-  local current_redirect
-  local current_logout
-  local canonical_redirect
-  local canonical_logout
   local use_rds
   local postgres_user
   local postgres_db
@@ -170,10 +149,6 @@ render_env_file() {
     overlay_ssm_values "$AEE_ENV_SSM_PATH" "$rendered_env"
   fi
 
-  frontend_url=$(read_env_value "$rendered_env" FRONTEND_URL)
-  legacy_domain=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_DOMAIN)
-  legacy_redirect=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_REDIRECT_URI)
-  legacy_logout=$(read_env_value "$rendered_env" NEXT_PUBLIC_COGNITO_LOGOUT_URI)
   use_rds=$(read_env_value "$rendered_env" USE_RDS)
 
   if [ -z "$use_rds" ]; then
@@ -203,42 +178,6 @@ render_env_file() {
     fi
   fi
 
-  if [ -z "$(read_env_value "$rendered_env" COGNITO_HOSTED_UI_DOMAIN)" ] && [ -n "$legacy_domain" ]; then
-    upsert_env_var "$rendered_env" COGNITO_HOSTED_UI_DOMAIN "$legacy_domain"
-  fi
-
-  if [ -z "$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)" ] && [ -n "$legacy_redirect" ]; then
-    upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "$legacy_redirect"
-  fi
-
-  if [ -z "$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)" ] && [ -n "$legacy_logout" ]; then
-    upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "$legacy_logout"
-  fi
-
-  if [ -n "$frontend_url" ]; then
-    if [ -z "$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)" ]; then
-      upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "${frontend_url%/}/api/auth/callback"
-    fi
-    if [ -z "$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)" ]; then
-      upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "${frontend_url%/}/login"
-    fi
-
-    canonical_redirect="${frontend_url%/}/api/auth/callback"
-    canonical_logout="${frontend_url%/}/login"
-    current_redirect=$(read_env_value "$rendered_env" COGNITO_REDIRECT_URI)
-    current_logout=$(read_env_value "$rendered_env" COGNITO_LOGOUT_URI)
-
-    if [ -n "$current_redirect" ] && is_alb_callback_uri "$current_redirect"; then
-      echo "==> Replacing legacy COGNITO_REDIRECT_URI with $canonical_redirect"
-      upsert_env_var "$rendered_env" COGNITO_REDIRECT_URI "$canonical_redirect"
-    fi
-
-    if [ -n "$current_logout" ] && is_alb_callback_uri "$current_logout"; then
-      echo "==> Replacing legacy COGNITO_LOGOUT_URI with $canonical_logout"
-      upsert_env_var "$rendered_env" COGNITO_LOGOUT_URI "$canonical_logout"
-    fi
-  fi
-
   if [ "$(read_env_value "$rendered_env" NEXT_PUBLIC_API_URL)" = "http://localhost:4000" ]; then
     upsert_env_var "$rendered_env" NEXT_PUBLIC_API_URL ""
   fi
@@ -251,25 +190,11 @@ validate_rendered_env() {
   local database_url
   local postgres_password
   local frontend_url
-  local cognito_user_pool_id
-  local cognito_app_client_id
-  local session_secret
-  local hosted_ui_domain
-  local hosted_ui_redirect_uri
-  local hosted_ui_logout_uri
-  local cognito_issuer_url
 
   use_rds=$(read_env_value .env USE_RDS)
   database_url=$(read_env_value .env DATABASE_URL)
   postgres_password=$(read_env_value .env POSTGRES_PASSWORD)
   frontend_url=$(read_env_value .env FRONTEND_URL)
-  cognito_user_pool_id=$(read_env_value .env COGNITO_USER_POOL_ID)
-  cognito_app_client_id=$(read_env_value .env COGNITO_APP_CLIENT_ID)
-  session_secret=$(read_env_value .env SESSION_SECRET)
-  hosted_ui_domain=$(read_env_value .env COGNITO_HOSTED_UI_DOMAIN)
-  hosted_ui_redirect_uri=$(read_env_value .env COGNITO_REDIRECT_URI)
-  hosted_ui_logout_uri=$(read_env_value .env COGNITO_LOGOUT_URI)
-  cognito_issuer_url=$(read_env_value .env COGNITO_ISSUER_URL)
 
   if [ -z "$use_rds" ]; then
     use_rds="true"
@@ -296,53 +221,8 @@ validate_rendered_env() {
     fi
   fi
 
-  if [ -z "$cognito_user_pool_id" ] || [[ "$cognito_user_pool_id" == *example* ]]; then
-    echo "ERROR: COGNITO_USER_POOL_ID must be set to your Cognito User Pool ID."
-    exit 1
-  fi
-
-  if [ -z "$cognito_app_client_id" ] || [[ "$cognito_app_client_id" == your-* ]]; then
-    echo "ERROR: COGNITO_APP_CLIENT_ID must be set to your Cognito app client ID."
-    exit 1
-  fi
-
   if [ -z "$frontend_url" ] || [[ "$frontend_url" == http://localhost* ]]; then
     echo "ERROR: FRONTEND_URL must be set to the public app URL for EC2 deployment."
-    exit 1
-  fi
-
-  if [ -z "$session_secret" ] || [[ "$session_secret" == replace-* ]]; then
-    echo "ERROR: SESSION_SECRET must be set to a strong random secret."
-    exit 1
-  fi
-
-  if [ -z "$hosted_ui_domain" ] || [[ "$hosted_ui_domain" != https://* ]]; then
-    echo "ERROR: COGNITO_HOSTED_UI_DOMAIN must be set to your Cognito Hosted UI domain."
-    exit 1
-  fi
-
-  if [ -z "$hosted_ui_redirect_uri" ] || [[ "$hosted_ui_redirect_uri" != http*://* ]]; then
-    echo "ERROR: COGNITO_REDIRECT_URI must be set to your Hosted UI callback URL."
-    exit 1
-  fi
-
-  if is_alb_callback_uri "$hosted_ui_redirect_uri"; then
-    echo "ERROR: COGNITO_REDIRECT_URI cannot be /oauth2/idpresponse for this app. Use ${frontend_url%/}/api/auth/callback."
-    exit 1
-  fi
-
-  if [ -z "$hosted_ui_logout_uri" ] || [[ "$hosted_ui_logout_uri" != http*://* ]]; then
-    echo "ERROR: COGNITO_LOGOUT_URI must be set to your Hosted UI logout redirect URL."
-    exit 1
-  fi
-
-  if is_alb_callback_uri "$hosted_ui_logout_uri"; then
-    echo "ERROR: COGNITO_LOGOUT_URI cannot be /oauth2/idpresponse. Use ${frontend_url%/}/login."
-    exit 1
-  fi
-
-  if [ -n "$cognito_issuer_url" ] && [[ "$cognito_issuer_url" != https://* ]]; then
-    echo "ERROR: COGNITO_ISSUER_URL must start with https:// when provided."
     exit 1
   fi
 }

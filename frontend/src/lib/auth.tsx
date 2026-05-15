@@ -6,6 +6,11 @@ import { api } from './api';
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '');
 const AUTH_BASE_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
+function buildAuthNavigationUrl(path: string, next: string): string {
+  const query = new URLSearchParams({ next });
+  return `${AUTH_BASE_URL}${path}?${query.toString()}`;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   userId: string | null;
@@ -54,17 +59,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     setState((current) => ({ ...current, loading: true }));
-    window.location.assign(`${AUTH_BASE_URL}/api/auth/login`);
+    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/new'));
   }, []);
 
   const signUp = useCallback(async () => {
     setState((current) => ({ ...current, loading: true }));
-    window.location.assign(`${AUTH_BASE_URL}/api/auth/login?mode=signup`);
+    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/new'));
   }, []);
 
   const logout = useCallback(() => {
     resetAuthState();
-    window.location.assign(`${AUTH_BASE_URL}/api/auth/logout`);
+    window.location.assign(buildAuthNavigationUrl('/api/auth/logout', '/login'));
   }, [resetAuthState]);
 
   const refreshUser = useCallback(async () => {

@@ -44,7 +44,7 @@ An end-to-end SaaS platform that discovers product opportunities, generates stra
 ```bash
 cp .env.example .env
 # Edit .env with your values (Bedrock uses the standard AWS SDK credential chain,
-# Cognito Hosted UI needs backend COGNITO_* + SESSION_SECRET,
+# auth is enforced by ALB authenticate-cognito rules,
 # and USE_RDS controls external RDS vs local postgres sidecar)
 cp .env backend/.env
 ```
@@ -92,14 +92,9 @@ cd frontend && npm run dev:clean
 
 Open **http://localhost:3000** — register an account and start.
 
-For local auth, configure a Cognito User Pool + Hosted UI app client and set:
+When running locally without ALB in front of the backend, protected `/api/*` routes return `401` unless your reverse proxy injects ALB OIDC headers.
 
-- `COGNITO_USER_POOL_ID`
-- `COGNITO_APP_CLIENT_ID`
-- `COGNITO_HOSTED_UI_DOMAIN`
-- `COGNITO_REDIRECT_URI`
-- `COGNITO_LOGOUT_URI`
-- `SESSION_SECRET`
+For production auth, configure ALB `authenticate-cognito` on protected routes.
 
 For production on EC2 with ALB (no nginx container):
 
@@ -107,6 +102,8 @@ For production on EC2 with ALB (no nginx container):
 - Route `/api/*` to the backend target (port `4000`)
 - Keep `NEXT_PUBLIC_API_URL` empty so frontend calls same-origin `/api/*`
 - Restrict EC2 security groups so only the ALB can access ports `3000` and `4000`
+- In the Cognito app client used by ALB, add callback URL `https://<your-domain>/oauth2/idpresponse`
+- Use `onUnauthenticatedRequest=authenticate` for API routes that require login
 
 Database mode switch:
 
@@ -136,10 +133,9 @@ docker exec -it aee-postgres psql -U postgres -d aee
 
 | Method | Endpoint | Description |
 |--------|---------|-------------|
-| GET | `/api/auth/login` | Start Cognito Hosted UI login |
-| GET | `/api/auth/callback` | Handle Cognito OIDC callback and create session |
-| GET | `/api/auth/logout` | Clear app session and sign out from Hosted UI |
-| GET | `/api/auth/me` | Return current session user |
+| GET | `/api/auth/login` | ALB auth entrypoint; redirects to app after successful ALB auth |
+| GET | `/api/auth/logout` | Clear ALB auth cookies and redirect to login page |
+| GET | `/api/auth/me` | Return current user mapped from ALB identity headers |
 | POST | `/api/products` | Create product from URL |
 | GET | `/api/products` | List user products |
 | GET | `/api/products/:id` | Get product detail |
@@ -182,7 +178,7 @@ aee/
 │   └── src/
 │       ├── main.ts            # NestJS bootstrap
 │       ├── app.module.ts      # Root module
-│       ├── auth/              # Cognito Hosted UI OIDC + session user sync
+│       ├── auth/              # ALB identity header auth + user sync
 │       ├── product/           # Product ingestion + web scraper
 │       ├── strategy/          # Multi-step LLM strategy generation
 │       ├── llm/               # Provider adapters + prompt templates
@@ -222,16 +218,6 @@ aee/
 | `POSTGRES_PASSWORD` | Yes when `USE_RDS=false` | — | Local postgres password |
 | `POSTGRES_DB` | No | aee_db | Local postgres database name when `USE_RDS=false` |
 | `DATABASE_URL` | Yes when `USE_RDS=true` | — | PostgreSQL connection string for RDS |
-| `COGNITO_USER_POOL_ID` | Yes | — | Cognito User Pool ID (used to derive issuer when `COGNITO_ISSUER_URL` is not set) |
-| `COGNITO_APP_CLIENT_ID` | Yes | — | Cognito app client ID used by backend OIDC client |
-| `COGNITO_APP_CLIENT_SECRET` | No | — | Cognito app client secret (required for confidential clients) |
-| `COGNITO_ISSUER_URL` | No | derived | Optional explicit issuer URL |
-| `COGNITO_HOSTED_UI_DOMAIN` | Yes | — | Cognito Hosted UI domain, including `https://` |
-| `COGNITO_REDIRECT_URI` | Yes | — | Hosted UI callback URL, e.g. `https://app.example.com/api/auth/callback` |
-| `COGNITO_LOGOUT_URI` | Yes | — | Hosted UI logout redirect URL, e.g. `https://app.example.com/login` |
-| `COGNITO_SCOPE` | No | openid email profile | OIDC scopes requested during login |
-| `SESSION_SECRET` | Yes | — | Express session signing secret |
-| `SESSION_COOKIE_SECURE` | No | true in production | Set to `true` behind HTTPS, `false` for local HTTP |
 | `LLM_PROVIDER` | No | bedrock | Explicit provider override: `bedrock`, `deepseek`, `openai`, `local`, or `auto` |
 | `AWS_REGION` | No | — | AWS region for Bedrock Runtime |
 | `BEDROCK_MODEL_ID` | No | anthropic.claude-3-haiku-20240307-v1:0 | Bedrock model ID when Bedrock is active |
@@ -242,3 +228,5 @@ aee/
 | `FRONTEND_URL` | No | http://localhost:3000 | CORS origin |
 | `THROTTLE_TTL` | No | 60 | Rate limit window (seconds) |
 | `THROTTLE_LIMIT` | No | 100 | Max requests per window |
+
+Auth note: Cognito app client, callback URL, and sign-out URL are configured on ALB listener rules, not via backend runtime env vars.
