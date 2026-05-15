@@ -15,6 +15,9 @@ COPY . .
 
 RUN npm run build
 
+# Keep only runtime dependencies for the production image.
+RUN npm prune --omit=dev && npm cache clean --force
+
 # ── Production stage ──
 FROM node:20-slim
 
@@ -29,13 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-COPY prisma ./prisma/
-
-RUN npm ci
-
-# Generate Prisma client in production image
-RUN npx prisma generate
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
 
 # Install Playwright Chromium browser
 RUN npx playwright install chromium
