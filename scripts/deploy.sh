@@ -5,6 +5,10 @@
 # Optional secret sources (set in the shell, instance env, or existing .env):
 #   AEE_ENV_SECRET_ID=<Secrets Manager secret id containing JSON or dotenv>
 #   AEE_ENV_SSM_PATH=</ssm/path/>   # Parameter Store path, keys use basename
+# Optional build-space controls:
+#   AEE_PREBUILD_PRUNE=true|false      # default: true
+#   AEE_AGGRESSIVE_PRUNE=true|false    # default: false (also prunes all cache/images/containers)
+#   AEE_MIN_FREE_MB=<number>           # default: 6144
 # ──────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -13,6 +17,86 @@ cd "$(dirname "$0")/.."
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "ERROR: required command not found: $1"
+    exit 1
+  fi
+}
+
+disk_free_mb() {
+  df -Pk . | awk 'NR==2 {print int($4 / 1024)}'
+}
+
+print_disk_space() {
+  local label="$1"
+  local free_mb
+
+  free_mb=$(disk_free_mb)
+  echo "==> Free disk space ${label}: ${free_mb} MB"
+}
+
+validate_positive_integer() {
+  local value="$1"
+  local var_name="$2"
+
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: ${var_name} must be a non-negative integer."
+    exit 1
+  fi
+}
+
+run_prebuild_prune() {
+  local prebuild_prune="${AEE_PREBUILD_PRUNE:-true}"
+  local aggressive_prune="${AEE_AGGRESSIVE_PRUNE:-true}"
+
+  case "$prebuild_prune" in
+    true|false)
+      ;;
+    *)
+      echo "ERROR: AEE_PREBUILD_PRUNE must be true or false."
+      exit 1
+      ;;
+  esac
+
+  case "$aggressive_prune" in
+    true|false)
+      ;;
+    *)
+      echo "ERROR: AEE_AGGRESSIVE_PRUNE must be true or false."
+      exit 1
+      ;;
+  esac
+
+  if [ "$prebuild_prune" != "true" ]; then
+    echo "==> Skipping pre-build Docker cleanup (AEE_PREBUILD_PRUNE=false)"
+    return
+  fi
+
+  echo "==> Running pre-build Docker cleanup"
+  docker builder prune -f >/dev/null || true
+  docker image prune -f >/dev/null || true
+
+  if [ "$aggressive_prune" = "true" ]; then
+    echo "==> Running aggressive Docker cleanup"
+    docker builder prune -af >/dev/null || true
+    docker image prune -af >/dev/null || true
+    docker container prune -f >/dev/null || true
+  fi
+}
+
+assert_min_disk_space() {
+  local min_free_mb="${AEE_MIN_FREE_MB:-6144}"
+  local free_mb
+
+  validate_positive_integer "$min_free_mb" "AEE_MIN_FREE_MB"
+
+  free_mb=$(disk_free_mb)
+  validate_positive_integer "$free_mb" "disk_free_mb"
+
+  if [ "$free_mb" -lt "$min_free_mb" ]; then
+    echo "ERROR: only ${free_mb} MB free, but at least ${min_free_mb} MB is required before build."
+    echo "Hint: set AEE_AGGRESSIVE_PRUNE=true or run:"
+    echo "  docker builder prune -af"
+    echo "  docker image prune -af"
+    echo "  docker container prune -f"
     exit 1
   fi
 }
@@ -239,6 +323,12 @@ echo "==> Rendering .env from .env.example and AWS-managed overrides"
 render_env_file
 validate_rendered_env
 
+require_command docker
+print_disk_space "before cleanup"
+run_prebuild_prune
+print_disk_space "after cleanup"
+assert_min_disk_space
+
 USE_RDS_VALUE=$(read_env_value .env USE_RDS)
 if [ -z "$USE_RDS_VALUE" ]; then
   USE_RDS_VALUE="true"
@@ -268,6 +358,7 @@ fi
 
 echo "==> Cleaning up old images"
 docker image prune -f
+docker builder prune -f >/dev/null || true
 
 echo "==> Deployment complete"
 docker compose "${compose_files[@]}" ps
