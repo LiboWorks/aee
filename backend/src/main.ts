@@ -1,9 +1,30 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/global-exception.filter';
+import { S3ErrorLogService } from './common/s3-error-log.service';
+
+const PROCESS_HANDLER_FLAG = Symbol.for('aee.s3-error-handlers-registered');
+type ProcessWithFlag = NodeJS.Process & { [PROCESS_HANDLER_FLAG]?: boolean };
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalFilters(app.get(GlobalExceptionFilter));
+
+  const s3ErrorLogService = app.get(S3ErrorLogService);
+  const flaggedProcess = process as ProcessWithFlag;
+  if (!flaggedProcess[PROCESS_HANDLER_FLAG]) {
+    process.on('unhandledRejection', (reason) => {
+      void s3ErrorLogService.logProcessError('unhandledRejection', reason);
+    });
+
+    process.on('uncaughtExceptionMonitor', (error) => {
+      void s3ErrorLogService.logProcessError('uncaughtExceptionMonitor', error);
+    });
+
+    flaggedProcess[PROCESS_HANDLER_FLAG] = true;
+  }
 
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 

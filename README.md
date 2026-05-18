@@ -224,6 +224,9 @@ aee/
 | `OPENAI_API_KEY` | No | — | OpenAI API key fallback |
 | `DEEPSEEK_API_KEY` | No | — | DeepSeek API key fallback |
 | `LLM_MODEL` | No | deepseek-chat | Model name for DeepSeek/OpenAI when those providers are active |
+| `ERROR_LOG_S3_BUCKET` | No | — | If set, backend uploads all captured exceptions to this S3 bucket |
+| `ERROR_LOG_S3_PREFIX` | No | errors | S3 key prefix used for exception logs |
+| `ERROR_LOG_S3_REGION` | No | `AWS_REGION` | Optional region override for the S3 logging bucket |
 | `BACKEND_PORT` | No | 4000 | Backend server port |
 | `FRONTEND_URL` | No | http://localhost:3000 | CORS origin |
 | `THROTTLE_TTL` | No | 60 | Rate limit window (seconds) |
