@@ -198,13 +198,24 @@ export class LlmService {
     }
 
     const explicitModel = this.config.get<string>('BEDROCK_MODEL_ID')?.trim();
+    const inferenceProfileId = this.config.get<string>('BEDROCK_INFERENCE_PROFILE_ID')?.trim();
     const sharedModel = isExplicitProvider ? this.config.get<string>('LLM_MODEL')?.trim() : undefined;
     const modelId = explicitModel || sharedModel || DEFAULT_BEDROCK_MODEL_ID;
     const region = this.getBedrockRegion();
 
-    this.logger.log(`Using AWS Bedrock${region ? ` (${region})` : ''} (model: ${modelId})`);
+    if (!inferenceProfileId) {
+      if (isExplicitProvider) {
+        throw new Error('BEDROCK_INFERENCE_PROFILE_ID is required when LLM_PROVIDER=bedrock.');
+      }
+      return null;
+    }
+
+    this.logger.log(
+      `Using AWS Bedrock${region ? ` (${region})` : ''} (model: ${modelId}, inference profile: ${inferenceProfileId})`,
+    );
     return new BedrockRuntimeLlm({
       modelId,
+      inferenceProfileId,
       region,
       temperature: DEFAULT_TEMPERATURE,
       topP: DEFAULT_TOP_P,
@@ -285,6 +296,7 @@ export class LlmService {
   private hasBedrockConfigHints(): boolean {
     const hints = [
       this.config.get<string>('BEDROCK_MODEL_ID'),
+      this.config.get<string>('BEDROCK_INFERENCE_PROFILE_ID'),
       this.config.get<string>('BEDROCK_AWS_REGION'),
       this.config.get<string>('AWS_REGION'),
       this.config.get<string>('AWS_DEFAULT_REGION'),

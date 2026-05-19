@@ -4,6 +4,7 @@ import { LLM } from '@langchain/core/language_models/llms';
 
 export interface BedrockRuntimeLlmInput {
   modelId: string;
+  inferenceProfileId: string;
   region?: string;
   temperature?: number;
   maxTokens?: number;
@@ -16,7 +17,15 @@ export class BedrockRuntimeLlm extends LLM {
 
   constructor(config: BedrockRuntimeLlmInput) {
     super({});
-    this.config = config;
+    const inferenceProfileId = config.inferenceProfileId?.trim();
+    if (!inferenceProfileId) {
+      throw new Error('BEDROCK_INFERENCE_PROFILE_ID is required for Bedrock runtime calls.');
+    }
+
+    this.config = {
+      ...config,
+      inferenceProfileId,
+    };
     this.client = new BedrockRuntimeClient(config.region ? { region: config.region } : {});
   }
 
@@ -27,6 +36,7 @@ export class BedrockRuntimeLlm extends LLM {
   _identifyingParams() {
     return {
       modelId: this.config.modelId,
+      inferenceProfileId: this.config.inferenceProfileId,
       region: this.config.region,
       temperature: this.config.temperature,
       maxTokens: this.config.maxTokens,
@@ -39,9 +49,22 @@ export class BedrockRuntimeLlm extends LLM {
     _options: this['ParsedCallOptions'],
     _runManager?: CallbackManagerForLLMRun,
   ): Promise<string> {
-    const response = await this.client.send(
+    const response = await this.converse(prompt);
+
+    const text = this.extractTextContent(response.output?.message?.content ?? []);
+    if (!text) {
+      throw new Error(
+        `Bedrock response did not contain text content${response.stopReason ? ` (stopReason: ${response.stopReason})` : ''}.`,
+      );
+    }
+
+    return text;
+  }
+
+  private async converse(prompt: string) {
+    return this.client.send(
       new ConverseCommand({
-        modelId: this.config.modelId,
+        modelId: this.config.inferenceProfileId,
         messages: [
           {
             role: 'user',
@@ -55,15 +78,6 @@ export class BedrockRuntimeLlm extends LLM {
         },
       }),
     );
-
-    const text = this.extractTextContent(response.output?.message?.content ?? []);
-    if (!text) {
-      throw new Error(
-        `Bedrock response did not contain text content${response.stopReason ? ` (stopReason: ${response.stopReason})` : ''}.`,
-      );
-    }
-
-    return text;
   }
 
   private extractTextContent(blocks: ContentBlock[]): string {

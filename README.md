@@ -221,6 +221,7 @@ aee/
 | `LLM_PROVIDER` | No | bedrock | Explicit provider override: `bedrock`, `deepseek`, `openai`, `local`, or `auto` |
 | `AWS_REGION` | No | — | AWS region for Bedrock Runtime |
 | `BEDROCK_MODEL_ID` | No | anthropic.claude-3-haiku-20240307-v1:0 | Bedrock model ID when Bedrock is active |
+| `BEDROCK_INFERENCE_PROFILE_ID` | Yes when `LLM_PROVIDER=bedrock` | — | Bedrock inference profile ID/ARN used for all Bedrock invocations (e.g. `apac.amazon.nova-micro-v1:0`) |
 | `OPENAI_API_KEY` | No | — | OpenAI API key fallback |
 | `DEEPSEEK_API_KEY` | No | — | DeepSeek API key fallback |
 | `LLM_MODEL` | No | deepseek-chat | Model name for DeepSeek/OpenAI when those providers are active |
