@@ -12,7 +12,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      router.replace('/dashboard/new');
+      router.replace('/dashboard/command-center');
     }
   }, [isAuthenticated, loading, router]);
 

@@ -13,6 +13,7 @@ import { ExecutionModule } from './execution/execution.module';
 import { ExperimentModule } from './experiment/experiment.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { FeatureFlagModule } from './feature-flag/feature-flag.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -36,6 +37,7 @@ import { HealthController } from './health.controller';
     ExperimentModule,
     AnalyticsModule,
     FeatureFlagModule,
+    IntelligenceModule,
   ],
   providers: [
     {

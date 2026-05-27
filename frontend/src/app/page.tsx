@@ -10,7 +10,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading) {
-      router.replace(isAuthenticated ? '/dashboard/new' : '/login');
+      router.replace(isAuthenticated ? '/dashboard/command-center' : '/login');
     }
   }, [isAuthenticated, loading, router]);
 

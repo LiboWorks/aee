@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { WebSocketServer } from 'ws';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
 import { S3ErrorLogService } from './common/s3-error-log.service';
+import { IntelligenceRealtimeService } from './intelligence/intelligence-realtime.service';
 
 const PROCESS_HANDLER_FLAG = Symbol.for('aee.s3-error-handlers-registered');
 type ProcessWithFlag = NodeJS.Process & { [PROCESS_HANDLER_FLAG]?: boolean };
@@ -44,6 +46,13 @@ async function bootstrap() {
 
   const port = parseInt(process.env['BACKEND_PORT'] ?? '4000', 10);
   await app.listen(port, '0.0.0.0');
+
+  const wsServer = new WebSocketServer({
+    server: app.getHttpServer(),
+    path: '/ws/intelligence',
+  });
+  app.get(IntelligenceRealtimeService).configureServer(wsServer);
+
   console.log(`🚀 AEE Backend running on http://0.0.0.0:${port}`);
 }
 

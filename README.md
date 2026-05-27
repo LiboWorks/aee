@@ -1,35 +1,42 @@
-# AEE — AI Experiment Engine for Amazon Sellers
+# AEE Intelligence OS — Amazon Seller Intelligence Platform
 
-An end-to-end SaaS platform that discovers product opportunities, generates strategy, creates listing assets, executes deployments, and runs ad experiments — all powered by AI.
+AEE is an autonomous market-research operating system for Amazon sellers, built for Shenzhen small and medium teams (3-20 people).
+
+The platform is designed to feel like a persistent AI co-pilot, not a chatbot wrapper:
+
+- AI agents continuously research opportunities and risks
+- Investigation workflows execute in multiple steps with evidence
+- Monitoring runs continuously and pushes live alerts
+- Recommendations are explainable and source-backed
+
+The previous product-input -> strategy -> asset -> experiment workflow still exists under legacy pages, but the primary experience now starts in the AI Command Center.
 
 ```
-┌──────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  Input Layer │───▶│ Strategy Engine   │───▶│ Asset Generator   │
-│  (URL+Budget)│    │ (LLM Multi-Step) │    │ (Listing Copy)    │
-└──────────────┘    └──────────────────┘    └──────────────────┘
-                                                     │
-                    ┌──────────────────┐              │
-                    │  Feedback Loop   │◀─────────────┤
-                    │  (PostgreSQL)    │    ┌──────────▼────────┐
-                    └──────────────────┘    │ Execution Layer   │
-                             ▲             │ (Manual/Auto/API) │
-                             │             └──────────┬────────┘
-                    ┌────────┴─────────┐              │
-                    │Experiment Runner │◀─────────────┘
-                    │(Simulate/Track)  │
-                    └──────────────────┘
+                                                                Realtime Intelligence Loop
+┌───────────────────────────┐       ws://.../ws/intelligence      ┌───────────────────────────┐
+│ Frontend Intelligence UI  │◀────────────────────────────────────▶│ Intelligence Runtime      │
+│ - Command Center          │                                       │ - Multi-agent orchestration
+│ - Investigation Workspace │                                       │ - Investigation state      │
+│ - Monitoring / Alerts     │──────────────────────────────────────▶│ - Activity + alerts feed   │
+└──────────────┬────────────┘            /api/intelligence/*       └──────────────┬────────────┘
+                             │                                                              │
+                             │                                                              │
+                             ▼                                                              ▼
+         Existing domain modules                                           LLM provider stack
+ (products/strategy/assets/experiments)                    (Bedrock default, plus DeepSeek/OpenAI/local)
 ```
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, React, Tailwind CSS, Recharts |
-| Backend | NestJS, TypeScript |
+| Frontend | Next.js 14, React, Tailwind CSS, Recharts, Framer Motion |
+| Backend | NestJS, TypeScript, ws (WebSocket server) |
 | Database | PostgreSQL, Prisma ORM, Amazon RDS (production) |
-| LLM | AWS Bedrock Runtime by default, with DeepSeek, OpenAI, and local GGUF fallbacks |
+| AI Runtime | AWS Bedrock Runtime by default, with DeepSeek/OpenAI/local GGUF fallbacks |
+| Agent Orchestration | AgentCore-ready runtime abstraction (`AGENTCORE_MODE=mock|bedrock`) |
 | Automation | Playwright (gated by feature flag) |
-| Auth | Amazon Cognito User Pool + Hosted UI |
+| Auth | Amazon Cognito via ALB authenticate-cognito rules |
 
 ## Quick Start
 
@@ -90,7 +97,7 @@ cd backend && npm run start:dev
 cd frontend && npm run dev:clean
 ```
 
-Open **http://localhost:3000** — register an account and start.
+Open **http://localhost:3000** and sign in. Authenticated users are redirected to **/dashboard/command-center**.
 
 When running locally without ALB in front of the backend, protected `/api/*` routes return `401` unless your reverse proxy injects ALB OIDC headers.
 
@@ -120,22 +127,58 @@ cd backend && npx prisma studio
 docker exec -it aee-postgres psql -U postgres -d aee
 ```
 
-## User Flow
+## Dashboard Pages (Intelligence OS)
 
-1. **Input** — Paste an Amazon product URL, set budget and risk level
-2. **Strategy** — AI analyzes viability, generates differentiation + pricing + execution plan
-3. **Assets** — AI generates optimized listing (title, bullets, description, image prompts)
-4. **Execution** — Review, approve, then execute (download manually, auto-fill via Playwright, or mock SP-API)
-5. **Experiment** — Run a simulated ad campaign, view daily metrics, get AI evaluation
-6. **History** — Review all past products and their outcomes
+| Route | Purpose |
+|------|---------|
+| `/dashboard/command-center` | Live AI command center with agent feed, emerging opportunities, danger zone, alerts, and quick actions |
+| `/dashboard/opportunity-workspace` | Multi-step investigation workspace with controls, live workflow, reasoning, and evidence |
+| `/dashboard/product-intelligence` | AI-generated product intelligence report with executive summary, reasoning, risk, and strategy |
+| `/dashboard/competition-survival` | Seller concentration, market heatmap, review domination, PPC/price-war pressure |
+| `/dashboard/small-team-opportunities` | Opportunities filtered for lean 3-20 person teams |
+| `/dashboard/trend-intelligence` | TikTok/Google/Reddit/Amazon trend acceleration and stage signals |
+| `/dashboard/live-monitoring` | Continuous monitoring center with realtime alerts |
+| `/dashboard/competitor-intelligence` | Competitor move tracking (new listings, price changes, review growth, etc.) |
+| `/dashboard/ai-research` | Investigation-oriented Q&A workflow (not plain chat) |
+| `/dashboard/evidence-explorer` | Source/evidence catalog with comparison snapshots |
+| `/dashboard/workspace-settings` | Team profile, agent cadence, and watchlist thresholds |
+
+Legacy routes remain available:
+
+- `/dashboard/new`
+- `/dashboard/history`
+- `/dashboard/products/[id]/strategy`
+- `/dashboard/products/[id]/execution`
+- `/dashboard/products/[id]/experiment`
+
+## Realtime + Agent Runtime
+
+- WebSocket endpoint: `/ws/intelligence`
+- Realtime event types:
+    - `connection.ready`
+    - `activity.update`
+    - `monitoring.alert`
+    - `investigation.progress`
+    - `investigation.completed`
+- Intelligence investigation state is currently in-memory in the backend runtime service.
+- Agent execution is abstracted behind an AgentCore-ready adapter:
+    - `AGENTCORE_MODE=mock` (default)
+    - `AGENTCORE_MODE=bedrock` (runs Bedrock-backed structured prompting path)
 
 ## API Endpoints
+
+### Auth
 
 | Method | Endpoint | Description |
 |--------|---------|-------------|
 | GET | `/api/auth/login` | ALB auth entrypoint; redirects to app after successful ALB auth |
 | GET | `/api/auth/logout` | Clear ALB auth cookies and redirect to login page |
 | GET | `/api/auth/me` | Return current user mapped from ALB identity headers |
+
+### Core Product / Legacy Workflow APIs
+
+| Method | Endpoint | Description |
+|--------|---------|-------------|
 | POST | `/api/products` | Create product from URL |
 | GET | `/api/products` | List user products |
 | GET | `/api/products/:id` | Get product detail |
@@ -156,6 +199,23 @@ docker exec -it aee-postgres psql -U postgres -d aee
 | GET | `/api/feature-flags` | List feature flags |
 | PATCH | `/api/feature-flags/:name` | Toggle flag |
 
+### Intelligence Platform APIs
+
+| Method | Endpoint | Description |
+|--------|---------|-------------|
+| GET | `/api/intelligence/command-center` | Command center snapshot (feed, opportunities, alerts, summaries) |
+| POST | `/api/intelligence/investigations` | Start multi-agent investigation |
+| GET | `/api/intelligence/investigations/:id` | Get investigation state/progress |
+| GET | `/api/intelligence/reports/:investigationId` | Get product intelligence report |
+| GET | `/api/intelligence/competition-survival` | Competition and survivability snapshot |
+| GET | `/api/intelligence/small-team-opportunities` | Small-team-focused opportunity list |
+| GET | `/api/intelligence/trend-intelligence` | Trend intelligence snapshot |
+| GET | `/api/intelligence/live-monitoring` | Monitoring overview and current alerts |
+| GET | `/api/intelligence/competitor-intelligence` | Competitor movement intelligence |
+| POST | `/api/intelligence/research-workspace` | Run investigation-oriented AI research query |
+| GET | `/api/intelligence/evidence-explorer` | Evidence and source explorer snapshot |
+| GET | `/api/intelligence/workspace-settings` | Workspace/team settings snapshot |
+
 ## Feature Flags
 
 | Flag | Default | Description |
@@ -173,40 +233,62 @@ aee/
 ├── .env.example
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma      # Database schema (9 models)
-│   │   └── seed.ts            # Feature flag seed data
+│   │   ├── schema.prisma
+│   │   └── seed.ts
 │   └── src/
-│       ├── main.ts            # NestJS bootstrap
-│       ├── app.module.ts      # Root module
-│       ├── auth/              # ALB identity header auth + user sync
-│       ├── product/           # Product ingestion + web scraper
-│       ├── strategy/          # Multi-step LLM strategy generation
-│       ├── llm/               # Provider adapters + prompt templates
-│       ├── asset/             # Listing asset generation
-│       ├── execution/         # 3-phase execution (manual/auto/API)
-│       ├── automation/        # Playwright scripts
-│       ├── integrations/      # Amazon SP-API mock
-│       ├── experiment/        # Experiment simulation + evaluation
-│       ├── analytics/         # History + timeline queries
-│       ├── feature-flag/      # Feature flag management
-│       ├── common/            # Action log service
-│       └── prisma/            # Prisma service (global)
+│       ├── main.ts
+│       ├── app.module.ts
+│       ├── auth/
+│       ├── product/
+│       ├── strategy/
+│       ├── llm/
+│       ├── asset/
+│       ├── execution/
+│       ├── automation/
+│       ├── integrations/
+│       ├── experiment/
+│       ├── analytics/
+│       ├── feature-flag/
+│       ├── common/
+│       ├── prisma/
+│       └── intelligence/
+│           ├── intelligence.controller.ts
+│           ├── intelligence.service.ts
+│           ├── intelligence-realtime.service.ts
+│           ├── intelligence.dto.ts
+│           ├── intelligence.types.ts
+│           ├── intelligence.constants.ts
+│           ├── intelligence.utils.ts
+│           └── agentcore/
+│               └── agentcore.adapter.ts
 └── frontend/
-    └── src/
-        ├── app/
-        │   ├── login/         # Auth pages
-        │   ├── register/
-        │   └── dashboard/
-        │       ├── new/       # Product input form
-        │       ├── history/   # History & analytics
-        │       └── products/[id]/
-        │           ├── strategy/   # Strategy results
-        │           ├── execution/  # Execution panel
-        │           └── experiment/ # Experiment dashboard
-        └── lib/
-            ├── api.ts         # API client
-            ├── auth.tsx       # Auth context
-            └── types.ts       # TypeScript types
+        └── src/
+                ├── app/
+                │   ├── login/
+                │   ├── register/
+                │   └── dashboard/
+                │       ├── command-center/
+                │       ├── opportunity-workspace/
+                │       ├── product-intelligence/
+                │       ├── competition-survival/
+                │       ├── small-team-opportunities/
+                │       ├── trend-intelligence/
+                │       ├── live-monitoring/
+                │       ├── competitor-intelligence/
+                │       ├── ai-research/
+                │       ├── evidence-explorer/
+                │       ├── workspace-settings/
+                │       ├── new/
+                │       ├── history/
+                │       └── products/[id]/
+                ├── components/
+                │   └── intelligence/
+                └── lib/
+                        ├── api.ts
+                        ├── auth.tsx
+                        ├── intelligence.ts
+                        ├── use-intelligence-realtime.ts
+                        └── types.ts
 ```
 
 ## Environment Variables
@@ -219,18 +301,20 @@ aee/
 | `POSTGRES_DB` | No | aee_db | Local postgres database name when `USE_RDS=false` |
 | `DATABASE_URL` | Yes when `USE_RDS=true` | — | PostgreSQL connection string for RDS |
 | `LLM_PROVIDER` | No | bedrock | Explicit provider override: `bedrock`, `deepseek`, `openai`, `local`, or `auto` |
+| `AGENTCORE_MODE` | No | mock | Intelligence runtime mode: `mock` or `bedrock` |
 | `AWS_REGION` | No | — | AWS region for Bedrock Runtime |
 | `BEDROCK_MODEL_ID` | No | anthropic.claude-3-haiku-20240307-v1:0 | Bedrock model ID when Bedrock is active |
-| `BEDROCK_INFERENCE_PROFILE_ID` | Yes when `LLM_PROVIDER=bedrock` | — | Bedrock inference profile ID/ARN used for all Bedrock invocations (e.g. `apac.amazon.nova-micro-v1:0`) |
+| `BEDROCK_INFERENCE_PROFILE_ID` | Yes when `LLM_PROVIDER=bedrock` | — | Bedrock inference profile ID/ARN used for Bedrock invocations |
 | `OPENAI_API_KEY` | No | — | OpenAI API key fallback |
 | `DEEPSEEK_API_KEY` | No | — | DeepSeek API key fallback |
 | `LLM_MODEL` | No | deepseek-chat | Model name for DeepSeek/OpenAI when those providers are active |
-| `ERROR_LOG_S3_BUCKET` | No | — | If set, backend uploads all captured exceptions to this S3 bucket |
+| `ERROR_LOG_S3_BUCKET` | No | — | If set, backend uploads captured exceptions to this S3 bucket |
 | `ERROR_LOG_S3_PREFIX` | No | errors | S3 key prefix used for exception logs |
 | `ERROR_LOG_S3_REGION` | No | `AWS_REGION` | Optional region override for the S3 logging bucket |
 | `BACKEND_PORT` | No | 4000 | Backend server port |
 | `FRONTEND_URL` | No | http://localhost:3000 | CORS origin |
 | `THROTTLE_TTL` | No | 60 | Rate limit window (seconds) |
 | `THROTTLE_LIMIT` | No | 100 | Max requests per window |
+| `NEXT_PUBLIC_API_URL` | No | empty in prod | Frontend API base URL override; empty means same-origin `/api/*` |
 
 Auth note: Cognito app client, callback URL, and sign-out URL are configured on ALB listener rules, not via backend runtime env vars.

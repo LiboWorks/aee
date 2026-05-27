@@ -1,5 +1,5 @@
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, '');
-const API_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
+export const API_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 
 class ApiClient {
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -141,6 +141,68 @@ class ApiClient {
 
   getProductTimeline(productId: string) {
     return this.request<{ product: import('./types').Product; actionLogs: unknown[] }>(`/api/analytics/product/${productId}/timeline`);
+  }
+
+  // Intelligence Platform
+  getCommandCenter() {
+    return this.request<import('./types').CommandCenterSnapshot>('/api/intelligence/command-center');
+  }
+
+  startInvestigation(data: {
+    query: string;
+    category?: string;
+    budgetLevel?: 'lean' | 'balanced' | 'aggressive';
+    smallTeamMode?: boolean;
+    riskTolerance?: 'conservative' | 'balanced' | 'aggressive';
+    marketType?: 'amazon-us' | 'amazon-eu' | 'amazon-jp';
+  }) {
+    return this.request<import('./types').InvestigationSession>('/api/intelligence/investigations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getInvestigation(id: string) {
+    return this.request<import('./types').InvestigationSession>(`/api/intelligence/investigations/${id}`);
+  }
+
+  getProductIntelligenceReport(investigationId: string) {
+    return this.request<import('./types').ProductIntelligenceReport>(`/api/intelligence/reports/${investigationId}`);
+  }
+
+  getCompetitionSurvival() {
+    return this.request<import('./types').CompetitionSurvivalSnapshot>('/api/intelligence/competition-survival');
+  }
+
+  getSmallTeamOpportunities() {
+    return this.request<import('./types').SmallTeamOpportunitySnapshot>('/api/intelligence/small-team-opportunities');
+  }
+
+  getTrendIntelligence() {
+    return this.request<import('./types').TrendIntelligenceSnapshot>('/api/intelligence/trend-intelligence');
+  }
+
+  getLiveMonitoring() {
+    return this.request<import('./types').LiveMonitoringSnapshot>('/api/intelligence/live-monitoring');
+  }
+
+  getCompetitorIntelligence() {
+    return this.request<import('./types').CompetitorIntelligenceSnapshot>('/api/intelligence/competitor-intelligence');
+  }
+
+  askResearchWorkspace(data: { question: string; context?: string }) {
+    return this.request<import('./types').ResearchWorkspaceResponse>('/api/intelligence/research-workspace', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getEvidenceExplorer() {
+    return this.request<import('./types').EvidenceExplorerSnapshot>('/api/intelligence/evidence-explorer');
+  }
+
+  getWorkspaceSettings() {
+    return this.request<import('./types').WorkspaceSettingsSnapshot>('/api/intelligence/workspace-settings');
   }
 }
 

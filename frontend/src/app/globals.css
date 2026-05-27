@@ -2,34 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --surface: #f6f8fc;
+  --panel: #ffffff;
+  --line: #dbe4ef;
+  --ink: #0f172a;
+  --muted: #556176;
+  --brand: #0f766e;
+  --brand-strong: #0b5f57;
+  --brand-soft: #ccfbf1;
+}
+
 @layer base {
+  .font-body {
+    font-family: var(--font-body), 'Segoe UI', sans-serif;
+  }
+
   body {
-    @apply bg-gray-50 text-gray-900;
+    background: radial-gradient(circle at 0% 0%, #ccfbf1 0, transparent 34%),
+      radial-gradient(circle at 100% 0%, #dbeafe 0, transparent 36%),
+      var(--surface);
+    color: var(--ink);
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply rounded-lg px-4 py-2 font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background-color: var(--brand);
   }
+
+  .btn-primary:hover {
+    background-color: var(--brand-strong);
+  }
+
   .btn-secondary {
-    @apply bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+    @apply rounded-lg px-4 py-2 font-medium text-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background-color: #e2e8f0;
   }
+
+  .btn-secondary:hover {
+    background-color: #cbd5e1;
+  }
+
   .btn-danger {
     @apply bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
   }
+
   .btn-success {
     @apply bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
   }
+
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+    @apply rounded-xl border p-6 shadow-sm;
+    border-color: var(--line);
+    background-color: var(--panel);
   }
+
   .input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2;
+    border-color: #cbd5e1;
   }
+
+  .input:focus {
+    border-color: var(--brand);
+    --tw-ring-color: color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply mb-1 block text-sm font-medium text-slate-700;
   }
+
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }

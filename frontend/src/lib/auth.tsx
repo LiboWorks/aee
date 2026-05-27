@@ -59,12 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async () => {
     setState((current) => ({ ...current, loading: true }));
-    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/new'));
+    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/command-center'));
   }, []);
 
   const signUp = useCallback(async () => {
     setState((current) => ({ ...current, loading: true }));
-    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/new'));
+    window.location.assign(buildAuthNavigationUrl('/api/auth/login', '/dashboard/command-center'));
   }, []);
 
   const logout = useCallback(() => {
