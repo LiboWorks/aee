@@ -309,7 +309,7 @@ export class ScraperService {
       });
 
       if (domData.isCaptcha) {
-        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA. \n${bodyHtml}`);
+        throw new BadGatewayException(`${bodyHtml}`);
       }
 
       if (!domData.title) {
