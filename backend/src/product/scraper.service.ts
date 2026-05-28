@@ -112,6 +112,7 @@ export class ScraperService {
       await this.expandContent(page);
 
       // Extract all product data from the live DOM in a single evaluate call
+      let bodyHtml = '';
       const domData = await page.evaluate(() => {
         const norm = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
         const text = (sel: string) => norm(document.querySelector(sel)?.textContent);
@@ -130,7 +131,7 @@ export class ScraperService {
         const stripTrail = (s: string) => s.replace(/\s*(Read|See) (more|less)\s*$/i, '').trim();
 
         // CAPTCHA check
-        const bodyHtml = document.body.innerHTML;
+        bodyHtml = document.body.innerHTML;
         const isCaptcha =
           bodyHtml.includes('Enter the characters you see below') ||
           bodyHtml.includes('api-services-support@amazon.com') ||
@@ -308,7 +309,7 @@ export class ScraperService {
       });
 
       if (domData.isCaptcha) {
-        throw new BadGatewayException('Amazon blocked the scrape with CAPTCHA');
+        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA. \n${bodyHtml}`);
       }
 
       if (!domData.title) {
