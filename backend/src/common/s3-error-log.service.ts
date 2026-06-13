@@ -57,6 +57,30 @@ export class S3ErrorLogService {
     }
   }
 
+  get bucketName(): string | null {
+    return this.bucket;
+  }
+
+  async uploadBuffer(buffer: Buffer, key: string, contentType: string): Promise<string | null> {
+    if (!this.bucket || !this.s3) return null;
+
+    try {
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ContentType: contentType,
+          Body: buffer,
+        }),
+      );
+      return key;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to upload buffer to s3://${this.bucket}/${key}: ${message}`);
+      return null;
+    }
+  }
+
   async logProcessError(event: ProcessErrorEvent, error: unknown): Promise<void> {
     await this.log(
       {

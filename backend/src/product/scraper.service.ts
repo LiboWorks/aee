@@ -1,5 +1,6 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { BrowserContext, chromium, Page } from 'playwright';
+import { S3ErrorLogService } from '../common/s3-error-log.service';
 
 export interface ScrapedReview {
   title: string;
@@ -37,6 +38,8 @@ export interface ScrapedProduct {
 @Injectable()
 export class ScraperService {
   private readonly logger = new Logger(ScraperService.name);
+
+  constructor(private readonly s3ErrorLog: S3ErrorLogService) {}
 
   async scrape(url: string, currency = 'USD'): Promise<ScrapedProduct> {
     const browser = await chromium.launch({
@@ -308,10 +311,15 @@ export class ScraperService {
       });
 
       if (domData.isCaptcha) {
-        const screenshotPath = `/tmp/captcha-${Date.now()}.png`;
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        this.logger.warn(`CAPTCHA screenshot saved to ${screenshotPath}`);
-        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA for: ${url} (screenshot: ${screenshotPath})`);
+        const screenshotBuffer = await page.screenshot({ fullPage: true });
+        const key = `captcha-screenshots/${Date.now()}.png`;
+        const uploadedKey = await this.s3ErrorLog.uploadBuffer(screenshotBuffer, key, 'image/png');
+        const bucket = this.s3ErrorLog.bucketName;
+        const screenshotInfo = uploadedKey && bucket
+          ? `https://s3.console.aws.amazon.com/s3/object/${bucket}?prefix=${uploadedKey}`
+          : '(S3 not configured — set ERROR_LOG_S3_BUCKET to enable screenshot upload)';
+        this.logger.warn(`CAPTCHA detected for ${url} — screenshot: ${screenshotInfo}`);
+        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA for: ${url} (screenshot: ${screenshotInfo})`);
       }
 
       if (!domData.title) {
