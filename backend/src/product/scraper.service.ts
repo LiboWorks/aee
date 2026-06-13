@@ -313,7 +313,7 @@ export class ScraperService {
           console.log(html);
           console.log('CAPTCHA page bodyHtml dump end');
         }, domData.bodyHtml);
-        throw new BadGatewayException('Amazon blocked the scrape with CAPTCHA');
+        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA (landed on: ${page.url()}, original: ${url})`);
       }
 
       if (!domData.title) {
