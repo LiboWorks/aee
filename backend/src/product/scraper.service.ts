@@ -71,6 +71,7 @@ export class ScraperService {
       });
 
       await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await this.clickThroughValidation(page);
 
       // Map currency code to symbol for waitForFunction check
       const expectedSymbol = this.currencyToSymbol(currency);
@@ -382,6 +383,22 @@ export class ScraperService {
       throw new BadGatewayException(`Product scrape failed: ${message}`);
     } finally {
       await browser.close();
+    }
+  }
+
+  private async clickThroughValidation(page: Page): Promise<boolean> {
+    try {
+      const btn = page.getByRole('button', { name: /continue shopping/i }).or(
+        page.getByRole('link', { name: /continue shopping/i }),
+      ).first();
+      const visible = await btn.isVisible({ timeout: 3000 });
+      if (!visible) return false;
+      this.logger.warn('Validation page detected — clicking "Continue shopping"');
+      await btn.click();
+      await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
+      return true;
+    } catch {
+      return false;
     }
   }
 
