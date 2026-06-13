@@ -308,12 +308,10 @@ export class ScraperService {
       });
 
       if (domData.isCaptcha) {
-        await page.evaluate((html: string) => {
-          console.log('CAPTCHA page bodyHtml dump start');
-          console.log(html);
-          console.log('CAPTCHA page bodyHtml dump end');
-        }, domData.bodyHtml);
-        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA (landed on: ${page.url()}, original: ${url})`);
+        const screenshotPath = `/tmp/captcha-${Date.now()}.png`;
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        this.logger.warn(`CAPTCHA screenshot saved to ${screenshotPath}`);
+        throw new BadGatewayException(`Amazon blocked the scrape with CAPTCHA for: ${url} (screenshot: ${screenshotPath})`);
       }
 
       if (!domData.title) {
