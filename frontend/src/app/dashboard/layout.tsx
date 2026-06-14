@@ -97,23 +97,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
 
         <main className="min-w-0 flex-1">
-          <div className="mb-3 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white/90 p-2 lg:hidden">
-            {navGroups[0]?.items.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
-                    active
-                      ? 'bg-cyan-50 text-cyan-800'
-                      : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          <div className="mb-3 space-y-2 rounded-2xl border border-slate-200 bg-white/90 p-2 lg:hidden">
+            {navGroups.map((group) => (
+              <div key={group.label} className="rounded-xl bg-white/70">
+                <p className="sticky left-0 z-10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  {group.label}
+                </p>
+                <div className="mt-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {group.items.map((item) => {
+                    const active = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium ${
+                          active
+                            ? 'bg-cyan-50 text-cyan-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           <motion.div
